@@ -1,7 +1,17 @@
 #include "MainComponent.h"
 //==============================================================================
 MainComponent::MainComponent()
-    : current_state(Stopped), openButton("Select a File..."), playButton("Play"), stopButton("Stop"), fft(fftOrder), spectrogramImage(juce::Image::RGB, 700, 700, true)
+    : current_state(Stopped), 
+    openButton("Select a File..."), 
+    playButton("Play"), 
+    stopButton("Stop"), 
+    fft(fftOrder), 
+    spectrogramImage(juce::Image::RGB, 660, 330, true), 
+    constellationImage(juce::Image::RGB, 660, 330, true), 
+    combinedImage(juce::Image::RGB, 1360, 330, true),
+    currentStatus("Please Select a Video for Processing"),
+    maxValue(1)
+    //sampleRate(44100) //sample rate (defaults to 44100, is updated later by reader)
 {
     // Buttons
     addAndMakeVisible(&openButton);
@@ -15,12 +25,13 @@ MainComponent::MainComponent()
     stopButton.onClick = [this] { stopButtonClicked(); };
     stopButton.setEnabled(false);
 
-    formatManager.registerBasicFormats(); // allows for .wav and .aaif files
-    transportSource.addChangeListener(this);  //respond to changes in state
-
     setOpaque(true);
     startTimerHz(60);
-    setSize (700, 700);
+
+    setSize (1400, 900);
+
+    formatManager.registerBasicFormats(); // allows for .wav and .aaif files
+    transportSource.addChangeListener(this);  //respond to changes in state
 
     // Some platforms require permissions to open input channels so request that here
     if (juce::RuntimePermissions::isRequired (juce::RuntimePermissions::recordAudio)
@@ -54,6 +65,14 @@ void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& buffe
     }
     // fill the buffer via the transport source
     transportSource.getNextAudioBlock(bufferToFill);
+
+    if (bufferToFill.buffer->getNumChannels() > 0)
+    {
+        auto* channelData = bufferToFill.buffer->getReadPointer(0, bufferToFill.startSample);
+
+        for (auto i = 0; i < bufferToFill.numSamples; ++i)
+            pushNextSampleIntoFifo(channelData[i]);
+    }
 }
 
 void MainComponent::releaseResources() {
@@ -64,19 +83,20 @@ void MainComponent::releaseResources() {
 void MainComponent::paint (juce::Graphics& g) {
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
     g.setColour(juce::Colours::white);
-    g.drawImage(spectrogramImage, spectrogramImage.getBounds().toFloat());
-    if (current_state == Playing) {
-        drawPlayLine(g);
-    }
+    g.drawImageAt(spectrogramImage, 20, 20);
+    g.drawImageAt(constellationImage, (getWidth() / 2)+20, 20);
+    g.drawImageAt(combinedImage, 20, 380);
+    g.drawImageAt(logo, (getWidth() / 2)-160, 750);
     g.setFont(20.0f);
+    g.drawMultiLineText(currentStatus, (getWidth()-400), 800, 400);
     g.drawText(currentSizeAsString, getLocalBounds(), juce::Justification::bottomRight, true);
 }
 
 
 void MainComponent::resized() {
-    openButton.setBounds(10, 10, getWidth() - 20, 30);
-    playButton.setBounds(10, 50, getWidth() - 20, 30);
-    stopButton.setBounds(10, 90, getWidth() - 20, 30);
+    openButton.setBounds(100, 740, ((getWidth() - 20)/2)-320, 30);
+    playButton.setBounds(100, 780, ((getWidth() - 20) / 2)-320, 30);
+    stopButton.setBounds(100, 820, ((getWidth() - 20) / 2)-320, 30);
     currentSizeAsString = juce::String(getWidth()) + " x " + juce::String(getHeight());
 }
 
@@ -99,7 +119,6 @@ void MainComponent::pushNextSampleIntoFifo(float sample) noexcept {
             memcpy(fftData, fifo, sizeof(fifo));
             nextFFTBlockReady = true;
         }
-
         fifoIndex = 0;
     }
     fifo[fifoIndex++] = sample;
@@ -123,14 +142,6 @@ void MainComponent::drawNextLineOfSpectrogram() {
     }
 }// drawNextLineOfSpectrogram()
 
-//draws the play line based on the audio player position
-void MainComponent::drawPlayLine(juce::Graphics& g) {
-    int lineX = 0;
-    lineX = (int)(pixelX * transportSource.getCurrentPosition() / transportSource.getLengthInSeconds());
-    g.setColour(juce::Colours::green);
-    g.fillRect(lineX, 0, 2, spectrogramImage.getHeight());
-}
-
 void MainComponent::openButtonClicked() {
     //Create the FileChooser object with a short message and allow the user to select only .wav files
     chooser = std::make_unique<juce::FileChooser>("Select a Wave file to play...", juce::File{}, "*.wav");
@@ -147,7 +158,7 @@ void MainComponent::readInFileFFT(const juce::File& file) {
     if (file != juce::File{}) {
         // attempt to create a reader for this particular file. 
         // This will return the nullptr value if it fails
-        auto* reader = formatManager.createReaderFor(file);
+        auto* reader = formatManager.createReaderFor(file); //reads in from the chosen file
 
         if (reader != nullptr) {
             // create a new AudioFormatReaderSource object using the reader we just created
@@ -193,6 +204,7 @@ void MainComponent::drawSpectrogram() {
         }
         position++;
     }
+    repaint();
 }
 
 void MainComponent::playButtonClicked() {
