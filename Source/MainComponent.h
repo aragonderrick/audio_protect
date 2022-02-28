@@ -18,7 +18,7 @@ public:
 
     enum
     {
-        fftOrder = 13,
+        fftOrder = 14,
         fftSize = 1 << fftOrder
     };
 
@@ -34,7 +34,6 @@ public:
     void stopButtonClicked();
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
     void changeState(TransportState newState);
-    void drawPlayLine(juce::Graphics& g);
     void timerCallback() override; //repaints at 60 hz when playing the wav file
 
     void pushNextSampleIntoFifo(float sample) noexcept;
@@ -51,16 +50,18 @@ private:
     juce::TextButton stopButton;
 
     // Format and Audio Variables
-    juce::AudioFormatManager formatManager;
-    std::unique_ptr< juce::AudioFormatReaderSource> readerSource;
-    juce::AudioTransportSource transportSource;
+    juce::AudioFormatManager formatManager; // takes care of audio formatting
+    std::unique_ptr< juce::AudioFormatReaderSource> readerSource; // source to read audio data from
+    juce::AudioTransportSource transportSource; // allows audio to be played, stopped, etc
     TransportState current_state;
     std::unique_ptr<juce::FileChooser> chooser;
-    juce::AudioSampleBuffer fileBuffer;
+    juce::AudioSampleBuffer fileBuffer; // stores the data from the file
 
     // Objects and variables for spectrogram
     juce::dsp::FFT fft;
     juce::Image spectrogramImage;
+    juce::Image constellationImage;
+    juce::Image combinedImage;
     int pixelX; //corresponding pixel position
 
     // variables needed for FFT
@@ -69,7 +70,12 @@ private:
     int fifoIndex = 0;
     bool nextFFTBlockReady = false;
     float maxValue;
+    //double sampleRate;
+    float** channels;
     int position; //position in the array of sample data
     juce::String currentSizeAsString;
+    juce::String currentStatus;
+    //Image myimage = ImageFileFormat::loadFrom(File("thefullpathtothefile.gif"));
+    juce::Image logo = juce::ImageFileFormat::loadFrom(juce::File("C:/Users/arago/OneDrive/Desktop/Spring2022/CSCI490/images/logo.png"));
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
