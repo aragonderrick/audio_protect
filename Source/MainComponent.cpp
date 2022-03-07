@@ -1,10 +1,8 @@
 #include "MainComponent.h"
 //==============================================================================
 MainComponent::MainComponent()
-    : current_state(Stopped), 
+    :
     openButton("Select a File..."), 
-    playButton("Play"), 
-    stopButton("Stop"), 
     fft(fftOrder), 
     spectrogramImage(juce::Image::RGB, 660, 330, true), 
     constellationImage(juce::Image::RGB, 660, 330, true), 
@@ -17,62 +15,54 @@ MainComponent::MainComponent()
     addAndMakeVisible(&openButton);
     openButton.onClick = [this] { openButtonClicked(); };
 
-    addAndMakeVisible(&playButton);
-    playButton.onClick = [this] { playButtonClicked(); };
-    playButton.setEnabled(false);
-
-    addAndMakeVisible(&stopButton);
-    stopButton.onClick = [this] { stopButtonClicked(); };
-    stopButton.setEnabled(false);
-
     setOpaque(true);
     startTimerHz(60);
 
     setSize (1400, 900);
 
     formatManager.registerBasicFormats(); // allows for .wav and .aaif files
-    transportSource.addChangeListener(this);  //respond to changes in state
+    //transportSource.addChangeListener(this);  //respond to changes in state
 
-    // Some platforms require permissions to open input channels so request that here
-    if (juce::RuntimePermissions::isRequired (juce::RuntimePermissions::recordAudio)
-        && ! juce::RuntimePermissions::isGranted (juce::RuntimePermissions::recordAudio))
-    {
-        juce::RuntimePermissions::request (juce::RuntimePermissions::recordAudio,
-                                           [&] (bool granted) { setAudioChannels (granted ? 2 : 0, 2); });
-    }
-    else
-    {
-        // Specify the number of input and output channels that we want to open
-        setAudioChannels (2, 2);
-    }
+    //// Some platforms require permissions to open input channels so request that here
+    //if (juce::RuntimePermissions::isRequired (juce::RuntimePermissions::recordAudio)
+    //    && ! juce::RuntimePermissions::isGranted (juce::RuntimePermissions::recordAudio))
+    //{
+    //    juce::RuntimePermissions::request (juce::RuntimePermissions::recordAudio,
+    //                                       [&] (bool granted) { setAudioChannels (granted ? 2 : 0, 2); });
+    //}
+    //else
+    //{
+    //    // Specify the number of input and output channels that we want to open
+    //    setAudioChannels (2, 2);
+    //}
 }
 
 MainComponent::~MainComponent() {
     // This shuts down the audio device and clears the audio source.
-    shutdownAudio();
+    //shutdownAudio();
 }
 
 //==============================================================================
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate) {
-    transportSource.prepareToPlay(samplesPerBlockExpected, sampleRate);
+    //transportSource.prepareToPlay(samplesPerBlockExpected, sampleRate);
 }
 
 void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) {
-    if (readerSource.get() == nullptr)
-    {
-        bufferToFill.clearActiveBufferRegion();
-        return;
-    }
-    // fill the buffer via the transport source
-    transportSource.getNextAudioBlock(bufferToFill);
+    //if (readerSource.get() == nullptr)
+    //{
+    //    bufferToFill.clearActiveBufferRegion();
+    //    return;
+    //}
+    //// fill the buffer via the transport source
+    //transportSource.getNextAudioBlock(bufferToFill);
 
-    if (bufferToFill.buffer->getNumChannels() > 0)
-    {
-        auto* channelData = bufferToFill.buffer->getReadPointer(0, bufferToFill.startSample);
+    //if (bufferToFill.buffer->getNumChannels() > 0)
+    //{
+    //    auto* channelData = bufferToFill.buffer->getReadPointer(0, bufferToFill.startSample);
 
-        for (auto i = 0; i < bufferToFill.numSamples; ++i)
-            pushNextSampleIntoFifo(channelData[i]);
-    }
+    //    for (auto i = 0; i < bufferToFill.numSamples; ++i)
+    //        pushNextSampleIntoFifo(channelData[i]);
+    //}
 }
 
 void MainComponent::releaseResources() {
@@ -82,30 +72,34 @@ void MainComponent::releaseResources() {
 //==============================================================================
 void MainComponent::paint (juce::Graphics& g) {
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
-    g.setColour(juce::Colours::white);
+
+
     g.drawImageAt(spectrogramImage, 20, 20);
     g.drawImageAt(constellationImage, (getWidth() / 2)+20, 20);
     g.drawImageAt(combinedImage, 20, 380);
     g.drawImageAt(logo, (getWidth() / 2)-160, 750);
     g.setFont(20.0f);
+    g.setColour(juce::Colours::white);
     g.drawMultiLineText(currentStatus, (getWidth()-400), 800, 400);
     g.drawText(currentSizeAsString, getLocalBounds(), juce::Justification::bottomRight, true);
 }
 
 
 void MainComponent::resized() {
-    openButton.setBounds(100, 740, ((getWidth() - 20)/2)-320, 30);
-    playButton.setBounds(100, 780, ((getWidth() - 20) / 2)-320, 30);
-    stopButton.setBounds(100, 820, ((getWidth() - 20) / 2)-320, 30);
+    openButton.setBounds(100, 780, ((getWidth() - 20)/2)-320, 30);
     currentSizeAsString = juce::String(getWidth()) + " x " + juce::String(getHeight());
 }
 
 
 //repaints at 60 hz when playing the wav file
 void MainComponent::timerCallback() {
-    if (current_state == Playing) {
+    if (nextFFTBlockReady)
+    {
+        drawNextLineOfSpectrogram();
+        nextFFTBlockReady = false;
         repaint();
     }
+
 }// timerCallback()
 
 //gives the current FFT block the next sample data
@@ -129,8 +123,7 @@ void MainComponent::drawNextLineOfSpectrogram() {
     // do FFT
     fft.performFrequencyOnlyForwardTransform(fftData);
     //for each pixel position y in the spectrogram image
-    for (int y = 1; y < imageHeight; ++y)
-    {
+    for (int y = 1; y < imageHeight; ++y) {
         //skew the y proportion logarithmically and get use this value to index into the fftData array
         const float skewedProportionY = 1.0f - std::exp(std::log(y / (float)imageHeight) * 0.2f);
         const int fftDataIndex = juce::jlimit(0, fftSize / 2, (int)(skewedProportionY * fftSize / 2));
@@ -139,6 +132,8 @@ void MainComponent::drawNextLineOfSpectrogram() {
         const float level = juce::jmap(std::log(fftData[fftDataIndex]), 0.0f, maxValue, 0.0f, 1.0f);
         spectrogramImage.setPixelAt(pixelX, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
         spectrogramImage.setPixelAt(pixelX + 1, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
+        //spectrogramImage.setPixelAt(pixelX, y, juce::Colour::greyLevel(level));
+        //spectrogramImage.setPixelAt(pixelX + 1, y, juce::Colour::greyLevel(level));
     }
 }// drawNextLineOfSpectrogram()
 
@@ -150,6 +145,7 @@ void MainComponent::openButtonClicked() {
     chooser->launchAsync(chooserFlags, [this](const juce::FileChooser& fc) {
         readInFileFFT(fc.getResult());
     });
+    currentStatus = "Processing The Selected File...";
 }// openButtonClicked()
 
 //reads in a file and dumps the sample data to the fileBuffer, then draws the spectrogram
@@ -167,16 +163,15 @@ void MainComponent::readInFileFFT(const juce::File& file) {
             // on subsequent commands to open a file.
             auto newSource = std::make_unique<juce::AudioFormatReaderSource>(reader, true);
             // The AudioFormatReaderSource object is connected to our AudioTransportSource object that is being used in our getNextAudioBlock()
-            transportSource.setSource(newSource.get(), 0, nullptr, reader->sampleRate);
+            //transportSource.setSource(newSource.get(), 0, nullptr, reader->sampleRate);
             const double duration = reader->lengthInSamples / reader->sampleRate;
             if (duration < 600) // limits input file to 600 seconds -> 10 mins
             {
                 fileBuffer.setSize(reader->numChannels, reader->lengthInSamples);
                 reader->read(&fileBuffer, 0, reader->lengthInSamples, 0, true, true);
-                setAudioChannels(0, reader->numChannels);
+                //setAudioChannels(0, reader->numChannels);
                 drawSpectrogram();
             }
-            playButton.setEnabled(true);
             // we can safely store the AudioFormatReaderSource object in our readerSource member
             // we must transfer ownership from the local newSource variable by using std::unique_ptr::release()
             readerSource.reset(newSource.release());
@@ -205,102 +200,4 @@ void MainComponent::drawSpectrogram() {
         position++;
     }
     repaint();
-}
-
-void MainComponent::playButtonClicked() {
-    if ((current_state == Stopped) || (current_state == Paused)) {
-        changeState(Starting);
-    }
-    else if (current_state == Playing) {
-        changeState(Pausing);
-    }
-}// playButtonClicked()
-
-void MainComponent::stopButtonClicked() {
-    if (current_state == Paused) {
-        changeState(Stopped);
-    }
-    else {
-        changeState(Stopping);
-    }
-}// stopButtonClicked()
-
-void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
-    if (source == &transportSource)
-    {
-        if (transportSource.isPlaying())
-            changeState(Playing);
-        else if ((current_state == Stopping) || (current_state == Playing))
-            changeState(Stopped);
-        else if (Pausing == current_state)
-            changeState(Paused);
-    }
-}// changeListenerCallback()
-
-void MainComponent::changeState(TransportState newState) {
-    if (current_state != newState)
-    {
-        current_state = newState;
-
-        switch (current_state)
-        {
-        case Stopped:
-            /*
-                transport returns to the Stopped state it disables the
-                Stop button, enables the Play button, and resets the transport
-                position back to the start of the file.
-            */
-            playButton.setButtonText("Play");
-            stopButton.setButtonText("Stop");
-            stopButton.setEnabled(false);
-            transportSource.setPosition(0.0);
-            break;
-
-        case Starting:
-            /*
-                Starting state is triggered by the user clicking the Play button,
-                this tells the AudioTransportSource object to start playing.
-                At this point we disable the Play button
-            */
-            transportSource.start();
-            break;
-
-        case Pausing:
-            /*
-                Pausing state is triggered by the user clicking the pause button,
-                this tells the AudioTransportSource object to pause playing.
-            */
-            transportSource.stop();
-            break;
-
-        case Paused:
-            /*
-                transport goes to the paused state it renames the play button,
-                and offeres user to resets the transport
-                position back to the start of the file.
-            */
-            playButton.setButtonText("Resume");
-            stopButton.setButtonText("Return to Start of Audio");
-            break;
-
-        case Playing:
-            /*
-                Playing state is triggered by the AudioTransportSource object
-                reporting a change via the changeListenerCallback() function.
-                Here we enable the Stop button.
-            */
-            playButton.setButtonText("Pause");
-            stopButton.setButtonText("Stop");
-            stopButton.setEnabled(true);
-            break;
-
-        case Stopping:
-            /*
-                Stopping state is triggered by the user clicking the Stop button,
-                so we tell the AudioTransportSource object to stop.
-            */
-            transportSource.stop();
-            break;
-        }
-    }
-}// changeState
+}// drawSpectrogram()
