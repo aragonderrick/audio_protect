@@ -7,7 +7,7 @@ class MainComponent  : public juce::AudioAppComponent, private juce::Timer
 public:
     enum
     {
-        fftOrder = 14,
+        fftOrder = 9,
         fftSize = 1 << fftOrder
     };
 
@@ -44,11 +44,12 @@ private:
     juce::Image spectrogramImage;
     juce::Image constellationImage;
     juce::Image combinedImage;
-    int pixelX; //corresponding pixel position
 
     // variables needed for FFT
-    float fifo[fftSize];
-    float fftData[2 * fftSize];
+    std::array<float, fftSize> fifo;
+    std::array<float, fftSize*2> fftData;
+    //float fifo[fftSize];
+    //float fftData[2 * fftSize];
     int fifoIndex = 0;
     bool nextFFTBlockReady = false;
     float maxValue;
@@ -56,7 +57,7 @@ private:
     int position; //position in the array of sample data
     juce::String currentSizeAsString;
     juce::String currentStatus;
-    juce::Image logo = juce::ImageFileFormat::loadFrom(juce::File("C:/Users/arago/OneDrive/Desktop/Spring2022/CSCI490/images/logo.png"));
+    juce::Image logo = juce::ImageFileFormat::loadFrom(juce::File("C:/Users/arago/OneDrive/Desktop/Spring2022/CSCI490/images/logo2.png"));
    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
