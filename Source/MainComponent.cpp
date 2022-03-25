@@ -21,48 +21,19 @@ MainComponent::MainComponent()
     setSize (1400, 900);
 
     formatManager.registerBasicFormats(); // allows for .wav and .aaif files
-    //transportSource.addChangeListener(this);  //respond to changes in state
-
-    //// Some platforms require permissions to open input channels so request that here
-    //if (juce::RuntimePermissions::isRequired (juce::RuntimePermissions::recordAudio)
-    //    && ! juce::RuntimePermissions::isGranted (juce::RuntimePermissions::recordAudio))
-    //{
-    //    juce::RuntimePermissions::request (juce::RuntimePermissions::recordAudio,
-    //                                       [&] (bool granted) { setAudioChannels (granted ? 2 : 0, 2); });
-    //}
-    //else
-    //{
-    //    // Specify the number of input and output channels that we want to open
-    //    setAudioChannels (2, 2);
-    //}
 }
 
 MainComponent::~MainComponent() {
-    // This shuts down the audio device and clears the audio source.
-    //shutdownAudio();
+    // no audio play back
 }
 
 //==============================================================================
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate) {
-    //transportSource.prepareToPlay(samplesPerBlockExpected, sampleRate);
+    // no audio play back
 }
 
 void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) {
-    //if (readerSource.get() == nullptr)
-    //{
-    //    bufferToFill.clearActiveBufferRegion();
-    //    return;
-    //}
-    //// fill the buffer via the transport source
-    //transportSource.getNextAudioBlock(bufferToFill);
-
-    //if (bufferToFill.buffer->getNumChannels() > 0)
-    //{
-    //    auto* channelData = bufferToFill.buffer->getReadPointer(0, bufferToFill.startSample);
-
-    //    for (auto i = 0; i < bufferToFill.numSamples; ++i)
-    //        pushNextSampleIntoFifo(channelData[i]);
-    //}
+    // no audio play back
 }
 
 void MainComponent::releaseResources() {
@@ -71,25 +42,33 @@ void MainComponent::releaseResources() {
 
 //==============================================================================
 void MainComponent::paint (juce::Graphics& g) {
+    // background color
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
-
-
+    // three main images
     g.drawImageAt(spectrogramImage, 20, 20);
     g.drawImageAt(constellationImage, (getWidth() / 2)+20, 20);
     g.drawImageAt(combinedImage, 20, 380);
+    // logo
     g.drawImageAt(logo, (getWidth() / 2)-160, 750);
+    // title bars
+    g.setColour(juce::Colour (27, 27, 27));
+    g.fillRect(20, 20, 660, 30);
+    g.fillRect((getWidth() / 2) + 20, 20, 660, 30);
+    g.fillRect(20, 380, 1360, 30);
+    // title bar text
     g.setFont(20.0f);
     g.setColour(juce::Colours::white);
     g.drawMultiLineText(currentStatus, (getWidth()-400), 800, 400);
     g.drawText(currentSizeAsString, getLocalBounds(), juce::Justification::bottomRight, true);
+    g.drawMultiLineText("Spectrogram No Peaks", 270, 40, 400);
+    g.drawMultiLineText("Peaks No Spectrogram", (getWidth() / 2) + 270, 40, 400);
+    g.drawMultiLineText("Spectrogram With Peaks", 580, 400, 400);
 }
-
 
 void MainComponent::resized() {
     openButton.setBounds(100, 780, ((getWidth() - 20)/2)-320, 30);
     currentSizeAsString = juce::String(getWidth()) + " x " + juce::String(getHeight());
 }
-
 
 //repaints at 60 hz when playing the wav file
 void MainComponent::timerCallback() {
@@ -109,32 +88,28 @@ void MainComponent::pushNextSampleIntoFifo(float sample) noexcept {
     if (fifoIndex == fftSize) {
         if (!nextFFTBlockReady)
         {
-            juce::zeromem(fftData, sizeof(fftData));
-            memcpy(fftData, fifo, sizeof(fifo));
+            std::fill(fftData.begin(), fftData.end(), 0.0f);
+            std::copy(fifo.begin(), fifo.end(), fftData.begin());
             nextFFTBlockReady = true;
         }
         fifoIndex = 0;
     }
-    fifo[fifoIndex++] = sample;
+    fifo[(size_t)fifoIndex++] = sample;
 }// pushNextSampleIntoFifo()
 
 void MainComponent::drawNextLineOfSpectrogram() {
-    const int imageHeight = spectrogramImage.getHeight();
-    // do FFT
-    fft.performFrequencyOnlyForwardTransform(fftData);
-    //for each pixel position y in the spectrogram image
-    for (int y = 1; y < imageHeight; ++y) {
-        //skew the y proportion logarithmically and get use this value to index into the fftData array
-        const float skewedProportionY = 1.0f - std::exp(std::log(y / (float)imageHeight) * 0.2f);
-        const int fftDataIndex = juce::jlimit(0, fftSize / 2, (int)(skewedProportionY * fftSize / 2));
-        maxValue = juce::jmax(std::log(fftData[fftDataIndex]), maxValue);
-        //get the appropriate color for the magnitude at this position
-        const float level = juce::jmap(std::log(fftData[fftDataIndex]), 0.0f, maxValue, 0.0f, 1.0f);
-        spectrogramImage.setPixelAt(pixelX, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
-        spectrogramImage.setPixelAt(pixelX + 1, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
-        //spectrogramImage.setPixelAt(pixelX, y, juce::Colour::greyLevel(level));
-        //spectrogramImage.setPixelAt(pixelX + 1, y, juce::Colour::greyLevel(level));
+    auto rightHandEdge = spectrogramImage.getWidth() - 1;
+    auto imageHeight = spectrogramImage.getHeight();
+    spectrogramImage.moveImageSection(0, 0, 1, 0, rightHandEdge, imageHeight);
+    fft.performFrequencyOnlyForwardTransform(fftData.data());
+    auto maxLevel = juce::FloatVectorOperations::findMinAndMax(fftData.data(), fftSize / 2);
+    for (auto y = 1; y < imageHeight; ++y) {
+        auto skewedProportionY = 1.0f - std::exp(std::log((float)y / (float)imageHeight) * 2.0f);
+        auto fftDataIndex = (size_t)juce::jlimit(0, fftSize / 2, (int)(skewedProportionY * fftSize / 2));
+        auto level = juce::jmap(fftData[fftDataIndex], 0.0f, juce::jmax(maxLevel.getEnd(), 1e-5f), 0.0f, 1.0f);
+        spectrogramImage.setPixelAt(rightHandEdge, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
     }
+
 }// drawNextLineOfSpectrogram()
 
 void MainComponent::openButtonClicked() {
@@ -148,32 +123,19 @@ void MainComponent::openButtonClicked() {
     currentStatus = "Processing The Selected File...";
 }// openButtonClicked()
 
-//reads in a file and dumps the sample data to the fileBuffer, then draws the spectrogram
 void MainComponent::readInFileFFT(const juce::File& file) {
-    // if () will succeed if the user actually selects a file(rather than cancelling)
     if (file != juce::File{}) {
-        // attempt to create a reader for this particular file. 
-        // This will return the nullptr value if it fails
         auto* reader = formatManager.createReaderFor(file); //reads in from the chosen file
-
         if (reader != nullptr) {
-            // create a new AudioFormatReaderSource object using the reader we just created
-            // We store the AudioFormatReaderSource object in a temporary std::unique_ptr 
-            // object to avoid deleting a previously allocated AudioFormatReaderSource prematurely 
-            // on subsequent commands to open a file.
             auto newSource = std::make_unique<juce::AudioFormatReaderSource>(reader, true);
-            // The AudioFormatReaderSource object is connected to our AudioTransportSource object that is being used in our getNextAudioBlock()
-            //transportSource.setSource(newSource.get(), 0, nullptr, reader->sampleRate);
             const double duration = reader->lengthInSamples / reader->sampleRate;
-            if (duration < 600) // limits input file to 600 seconds -> 10 mins
-            {
+            if (duration < 600) {
+                // limits input file to 600 seconds -> 10 mins
                 fileBuffer.setSize(reader->numChannels, reader->lengthInSamples);
                 reader->read(&fileBuffer, 0, reader->lengthInSamples, 0, true, true);
                 //setAudioChannels(0, reader->numChannels);
                 drawSpectrogram();
             }
-            // we can safely store the AudioFormatReaderSource object in our readerSource member
-            // we must transfer ownership from the local newSource variable by using std::unique_ptr::release()
             readerSource.reset(newSource.release());
         }
     }
@@ -183,11 +145,10 @@ void MainComponent::readInFileFFT(const juce::File& file) {
 void MainComponent::drawSpectrogram() {
     //clear the spectrogram
     position = 0;
-    pixelX = 0;
     spectrogramImage.clear(spectrogramImage.getBounds(), juce::Colours::black);
     nextFFTBlockReady = false;
-    juce::zeromem(fftData, sizeof(fftData));
-    juce::zeromem(fifo, sizeof(fifo));
+    std::fill(fftData.begin(), fftData.end(), 0.0f);
+    std::fill(fifo.begin(), fifo.end(), 0.0f);
 
     //for each sample in the file buffer
     while (position < fileBuffer.getNumSamples()) {
@@ -195,7 +156,6 @@ void MainComponent::drawSpectrogram() {
         if (nextFFTBlockReady) {
             drawNextLineOfSpectrogram();
             nextFFTBlockReady = false;
-            pixelX += 2;
         }
         position++;
     }
