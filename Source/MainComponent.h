@@ -1,13 +1,16 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "Range.h"
+
+using Range = juce::NormalisableRange<float>;
 
 class MainComponent  : public juce::AudioAppComponent, private juce::Timer
 {
 public:
     enum
     {
-        fftOrder = 9,
+        fftOrder = 10,
         fftSize = 1 << fftOrder
     };
 
@@ -25,6 +28,7 @@ public:
     void timerCallback() override; //repaints at 60 hz when playing the wav file
     void pushNextSampleIntoFifo(float sample) noexcept;
     void drawNextLineOfSpectrogram();
+    void feedNextLineOfSpectrogram(int x);
     void readInFileFFT(const juce::File& file);
     void drawSpectrogram();
 
@@ -48,13 +52,14 @@ private:
     // variables needed for FFT
     std::array<float, fftSize> fifo;
     std::array<float, fftSize*2> fftData;
-    //float fifo[fftSize];
-    //float fftData[2 * fftSize];
     int fifoIndex = 0;
     bool nextFFTBlockReady = false;
     float maxValue;
     float** channels;
     int position; //position in the array of sample data
+    int pixelX;
+    int fftIndex;
+    Range normalRange;
     juce::String currentSizeAsString;
     juce::String currentStatus;
     juce::Image logo = juce::ImageFileFormat::loadFrom(juce::File("C:/Users/arago/OneDrive/Desktop/Spring2022/CSCI490/images/logo2.png"));
