@@ -5,12 +5,12 @@
 
 using Range = juce::NormalisableRange<float>;
 
-class MainComponent  : public juce::AudioAppComponent, private juce::Timer
+class MainComponent  : public juce::AudioAppComponent
 {
 public:
     enum
     {
-        fftOrder = 10,
+        fftOrder = 13,
         fftSize = 1 << fftOrder
     };
 
@@ -25,10 +25,8 @@ public:
     void resized() override;
     //==============================================================================
     void openButtonClicked();
-    void timerCallback() override; //repaints at 60 hz when playing the wav file
     void pushNextSampleIntoFifo(float sample) noexcept;
     void drawNextLineOfSpectrogram();
-    void feedNextLineOfSpectrogram(int x);
     void readInFileFFT(const juce::File& file);
     void drawSpectrogram();
 
