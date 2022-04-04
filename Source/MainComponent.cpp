@@ -9,16 +9,15 @@ MainComponent::MainComponent()
     constellationImage(juce::Image::RGB, 660, 330, true), 
     combinedImage(juce::Image::RGB, 1360, 330, true),
     currentStatus("Please Select a Video for Processing"),
-    maxValue(1),
-    normalRange(makeRange::withCentre(20.f, 20000.f, 10000.f))
-    //sampleRate(44100) //sample rate (defaults to 44100, is updated later by reader)
+    maxValue(1)
 {
     // Buttons
     addAndMakeVisible(&openButton);
     openButton.onClick = [this] { openButtonClicked(); };
 
     setOpaque(true);
-    startTimerHz(60);
+
+    setAudioChannels(1, 0);
 
     setSize (1400, 900);
 
@@ -27,42 +26,18 @@ MainComponent::MainComponent()
 
 MainComponent::~MainComponent() {
     // no audio play back
+    shutdownAudio();
 }
 
 //==============================================================================
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate) {
     // no audio play back
+    normalRange = makeRange::withCentre(float((double(fftSize) / sampleRate) * 20.f), float((double(fftSize) / sampleRate) * 20000.f), float((double(fftSize)/sampleRate)*1000.f));
 }
 
 void MainComponent::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill) {
     // no audio play back
-    auto numInputChannels = fileBuffer.getNumChannels();
-    auto numOutputChannels = bufferToFill.buffer->getNumChannels();
-
-    auto outputSamplesRemaining = bufferToFill.numSamples;
-    auto outputSamplesOffset = bufferToFill.startSample;
-
-    while (outputSamplesRemaining > 0) {
-        auto bufferSamplesRemaining = fileBuffer.getNumSamples() - position;
-        auto samplesThisTime = juce::jmin(outputSamplesRemaining, bufferSamplesRemaining);
-
-        for (auto channel = 0; channel < numOutputChannels; ++channel)
-        {
-            bufferToFill.buffer->copyFrom(channel,
-                outputSamplesOffset,
-                fileBuffer,
-                channel % numInputChannels,
-                position,
-                samplesThisTime);
-        }
-
-        outputSamplesRemaining -= samplesThisTime;
-        outputSamplesOffset += samplesThisTime;
-        position += samplesThisTime;
-
-        if (position == fileBuffer.getNumSamples())
-            position = 0;
-    }
+    bufferToFill.clearActiveBufferRegion();
 }
 
 void MainComponent::releaseResources() {
@@ -99,16 +74,6 @@ void MainComponent::resized() {
     currentSizeAsString = juce::String(getWidth()) + " x " + juce::String(getHeight());
 }
 
-//repaints at 60 hz when playing the wav file
-void MainComponent::timerCallback() {
-    if (nextFFTBlockReady)
-    {
-        drawNextLineOfSpectrogram();
-        nextFFTBlockReady = false;
-        repaint();
-    }
-
-}// timerCallback()
 
 //gives the current FFT block the next sample data
 void MainComponent::pushNextSampleIntoFifo(float sample) noexcept {
@@ -126,77 +91,19 @@ void MainComponent::pushNextSampleIntoFifo(float sample) noexcept {
     fifo[(size_t)fifoIndex++] = sample;
 }// pushNextSampleIntoFifo()
 
-//void MainComponent::drawNextLineOfSpectrogram() {
-//    auto rightHandEdge = spectrogramImage.getWidth() - 1;
-//    auto imageHeight = spectrogramImage.getHeight();
-//    spectrogramImage.moveImageSection(0, 0, 1, 0, rightHandEdge, imageHeight);
-//    fft.performFrequencyOnlyForwardTransform(fftData.data());
-//    auto maxLevel = juce::FloatVectorOperations::findMinAndMax(fftData.data(), fftSize / 2);
-//    for (auto y = 1; y < imageHeight; ++y) {
-//        auto skewedProportionY = 1.0f - std::exp(std::log((float)y / (float)imageHeight) * 2.0f);
-//        auto fftDataIndex = (size_t)juce::jlimit(0, fftSize / 2, (int)(skewedProportionY * fftSize / 2));
-//        auto level = juce::jmap(fftData[fftDataIndex], 0.0f, juce::jmax(maxLevel.getEnd(), 1e-5f), 0.0f, 1.0f);
-//        spectrogramImage.setPixelAt(rightHandEdge, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
-//    }
-//
-//}// drawNextLineOfSpectrogram()
-
-//void MainComponent::drawNextLineOfSpectrogram() {
-//    auto imageHeight = spectrogramImage.getHeight();
-//    fft.performFrequencyOnlyForwardTransform(fftData.data());
-//    for (auto y = 1; y < imageHeight; ++y) {
-//        //skew the y proportion logarithmically and get use this value to index into the fftData array
-//        const float skewedProportionY = 1.0f - std::exp(std::log(y / (float)imageHeight) * 0.2f);
-//        const int fftDataIndex = juce::jlimit(0, fftSize / 2, (int)(skewedProportionY * fftSize / 2));
-//        maxValue = juce::jmax(std::log(fftData[fftDataIndex]), maxValue);
-//        //get the appropriate color for the magnitude at this position
-//        const float level = juce::jmap(std::log(fftData[fftDataIndex]), 0.0f, maxValue, 0.0f, 1.0f);
-//        spectrogramImage.setPixelAt(pixelX, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
-//        spectrogramImage.setPixelAt(pixelX + 1, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
-//    }
-//
-//}// drawNextLineOfSpectrogram()
- 
-//void MainComponent::feedNextLineOfSpectrogram(int x) {
-//    auto imageHeight = spectrogramImage.getHeight();
-//    fft.performFrequencyOnlyForwardTransform(fftData.data());
-//    auto maxLevel = juce::FloatVectorOperations::findMinAndMax(fftData.data(), fftSize / 2);
-//    for (auto y = 1; y < imageHeight; ++y) {
-//        //auto skewedProportionY = 1.0f - std::exp(std::log((float)y / (float)imageHeight) * 2.0f);
-//        auto normalization = (float)y / imageHeight;
-//        //auto deNormalized = normalRange.convertFrom0to1(normalization);
-//        //auto reNormalized = (deNormalized - 20.f) / 20000.f;
-//        auto fftDataIndex =  (1 - normalization) * fftSize * .5f;
-//
-//        //auto fftDataIndex = (size_t)juce::jlimit(0, fftSize / 2, (int)(skewedProportionY * fftSize / 2));
-//        auto level = juce::jmap(fftData[fftDataIndex], 0.0f, juce::jmax(maxLevel.getEnd(), 1e-5f), 0.0f, 1.0f);
-//        // auto denormalValue = range.convertFrom0to1(value);
-//        spectrogramImage.setPixelAt(x, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
-//    }
-//}
 
 void MainComponent::drawNextLineOfSpectrogram() {
-    auto rightHandEdge = spectrogramImage.getWidth() - 1;
     auto imageHeight = spectrogramImage.getHeight();
-    auto imageWidth = spectrogramImage.getWidth();
-    spectrogramImage.moveImageSection(0, 0, 1, 0, rightHandEdge, imageHeight);
     fft.performFrequencyOnlyForwardTransform(fftData.data());
     auto maxLevel = juce::FloatVectorOperations::findMinAndMax(fftData.data(), fftSize / 2);
     for (auto y = 1; y < imageHeight; ++y) {
-        //auto skewedProportionY = 1.0f - std::exp(std::log((float)y / (float)imageHeight) * 2.0f);
         auto normalization = (float)y / imageHeight;
-        //auto deNormalized = normalRange.convertFrom0to1(normalization);
-        //auto reNormalized = (deNormalized - 20.f) / 20000.f;
-        auto fftDataIndex =  (1 - normalization) * fftSize * .5f;
-
-        //auto fftDataIndex = (size_t)juce::jlimit(0, fftSize / 2, (int)(skewedProportionY * fftSize / 2));
+        auto fftDataIndex = normalRange.convertFrom0to1((1-normalization));
         auto level = juce::jmap(fftData[fftDataIndex], 0.0f, juce::jmax(maxLevel.getEnd(), 1e-5f), 0.0f, 1.0f);
-        // auto denormalValue = range.convertFrom0to1(value);
-        spectrogramImage.setPixelAt(rightHandEdge, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
+        spectrogramImage.setPixelAt(pixelX, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
+        spectrogramImage.setPixelAt(pixelX + 1, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
     }
-
 }// drawNextLineOfSpectrogram()
-
 
 void MainComponent::openButtonClicked() {
     //Create the FileChooser object with a short message and allow the user to select only .wav files
@@ -220,7 +127,6 @@ void MainComponent::readInFileFFT(const juce::File& file) {
                 fileBuffer.setSize(reader->numChannels, reader->lengthInSamples);
                 reader->read(&fileBuffer, 0, reader->lengthInSamples, 0, true, true);
                 position = 0;
-                //setAudioChannels(0, reader->numChannels);
                 drawSpectrogram();
             }
             readerSource.reset(newSource.release());
@@ -244,7 +150,7 @@ void MainComponent::drawSpectrogram() {
         if (nextFFTBlockReady) {
             drawNextLineOfSpectrogram();
             nextFFTBlockReady = false;
-            pixelX+=2;
+            pixelX+=1;
         }
         position++;
     }
