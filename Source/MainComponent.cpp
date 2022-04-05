@@ -91,19 +91,36 @@ void MainComponent::pushNextSampleIntoFifo(float sample) noexcept {
     fifo[(size_t)fifoIndex++] = sample;
 }// pushNextSampleIntoFifo()
 
-
 void MainComponent::drawNextLineOfSpectrogram() {
     auto imageHeight = spectrogramImage.getHeight();
     fft.performFrequencyOnlyForwardTransform(fftData.data());
     auto maxLevel = juce::FloatVectorOperations::findMinAndMax(fftData.data(), fftSize / 2);
+    constellationData.resize(pixelX+1);
     for (auto y = 1; y < imageHeight; ++y) {
         auto normalization = (float)y / imageHeight;
         auto fftDataIndex = normalRange.convertFrom0to1((1-normalization));
         auto level = juce::jmap(fftData[fftDataIndex], 0.0f, juce::jmax(maxLevel.getEnd(), 1e-5f), 0.0f, 1.0f);
+        constellationData[pixelX].push_back(std::make_pair(level,y));
         spectrogramImage.setPixelAt(pixelX, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
-        spectrogramImage.setPixelAt(pixelX + 1, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
+        //spectrogramImage.setPixelAt(pixelX + 1, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
+        combinedImage.setPixelAt(pixelX, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
     }
 }// drawNextLineOfSpectrogram()
+
+void MainComponent::drawConstellationImage() {
+    for (int x = 0; x < (int)constellationData.size(); x++) {
+        std::sort(constellationData[x].begin(), constellationData[x].end());
+        std::vector<std::pair<float, int>>::const_iterator last = constellationData[x].end();
+        std::vector<std::pair<float, int>>::const_iterator first = constellationData[x].end() - 10;
+        std::vector<std::pair<float, int>> peakPoints(first, last);
+        for (int y = 0; y < (int)peakPoints.size(); y++) {
+            //DBG(y << " PixelX: " << x << " PixelY: " << peakPoints[y].second << " FrequencyLevel: " << peakPoints[y].first);
+            constellationImage.setPixelAt(x, peakPoints[y].second, juce::Colours::white);
+            //constellationImage.setPixelAt(x + 1, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
+            combinedImage.setPixelAt(x, peakPoints[y].second, juce::Colours::white);
+        }
+    }
+}// end constellationImage()
 
 void MainComponent::openButtonClicked() {
     //Create the FileChooser object with a short message and allow the user to select only .wav files
@@ -140,6 +157,8 @@ void MainComponent::drawSpectrogram() {
     position = 0;
     pixelX = 0;
     spectrogramImage.clear(spectrogramImage.getBounds(), juce::Colours::black);
+    constellationImage.clear(constellationImage.getBounds(), juce::Colours::black);
+    combinedImage.clear(combinedImage.getBounds(), juce::Colours::black);
     nextFFTBlockReady = false;
     std::fill(fftData.begin(), fftData.end(), 0.0f);
     std::fill(fifo.begin(), fifo.end(), 0.0f);
@@ -154,5 +173,6 @@ void MainComponent::drawSpectrogram() {
         }
         position++;
     }
+    drawConstellationImage();
     repaint();
 }// drawSpectrogram()
