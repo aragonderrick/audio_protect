@@ -29,6 +29,7 @@ public:
     void drawNextLineOfSpectrogram();
     void readInFileFFT(const juce::File& file);
     void drawSpectrogram();
+    void drawConstellationImage();
 
 private:
     // Buttons
@@ -50,6 +51,7 @@ private:
     // variables needed for FFT
     std::array<float, fftSize> fifo;
     std::array<float, fftSize*2> fftData;
+    std::vector<std::vector<std::pair<float, int>>> constellationData; // vector of pairs where <fftData, y-axis pixel>
     int fifoIndex = 0;
     bool nextFFTBlockReady = false;
     float maxValue;
