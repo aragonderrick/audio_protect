@@ -32,6 +32,7 @@ MainComponent::~MainComponent() {
 //==============================================================================
 void MainComponent::prepareToPlay (int samplesPerBlockExpected, double sampleRate) {
     // no audio play back
+    // set range for data normalization
     normalRange = makeRange::withCentre(float((double(fftSize) / sampleRate) * 20.f), float((double(fftSize) / sampleRate) * 20000.f), float((double(fftSize)/sampleRate)*1000.f));
 }
 
@@ -93,34 +94,77 @@ void MainComponent::pushNextSampleIntoFifo(float sample) noexcept {
 
 void MainComponent::drawNextLineOfSpectrogram() {
     auto imageHeight = spectrogramImage.getHeight();
+    // do the fft
     fft.performFrequencyOnlyForwardTransform(fftData.data());
     auto maxLevel = juce::FloatVectorOperations::findMinAndMax(fftData.data(), fftSize / 2);
+    // prepare vectors for push_back()
     constellationData.resize(pixelX+1);
+    hashingData.resize(pixelX + 1);
+    // for each pixel on the y-axis
     for (auto y = 1; y < imageHeight; ++y) {
+        // normalize the data
         auto normalization = (float)y / imageHeight;
         auto fftDataIndex = normalRange.convertFrom0to1((1-normalization));
         auto level = juce::jmap(fftData[fftDataIndex], 0.0f, juce::jmax(maxLevel.getEnd(), 1e-5f), 0.0f, 1.0f);
+        // store key points
+        hashingData[pixelX].push_back(std::make_pair(fftData[fftDataIndex], y)); // implicit caste to int for fftData[fftDataIndex]
         constellationData[pixelX].push_back(std::make_pair(level,y));
+        // draw the image
         spectrogramImage.setPixelAt(pixelX, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
-        //spectrogramImage.setPixelAt(pixelX + 1, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
         combinedImage.setPixelAt(pixelX, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
     }
 }// drawNextLineOfSpectrogram()
 
 void MainComponent::drawConstellationImage() {
     for (int x = 0; x < (int)constellationData.size(); x++) {
-        std::sort(constellationData[x].begin(), constellationData[x].end());
-        std::vector<std::pair<float, int>>::const_iterator last = constellationData[x].end();
-        std::vector<std::pair<float, int>>::const_iterator first = constellationData[x].end() - 10;
-        std::vector<std::pair<float, int>> peakPoints(first, last);
+        generatePeakPoints(x);
+        // draw these points on the image
         for (int y = 0; y < (int)peakPoints.size(); y++) {
             //DBG(y << " PixelX: " << x << " PixelY: " << peakPoints[y].second << " FrequencyLevel: " << peakPoints[y].first);
             constellationImage.setPixelAt(x, peakPoints[y].second, juce::Colours::white);
-            //constellationImage.setPixelAt(x + 1, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
             combinedImage.setPixelAt(x, peakPoints[y].second, juce::Colours::white);
         }
     }
 }// end constellationImage()
+
+void MainComponent::generatePeakPoints(int x) {
+    // sort to get the most prominent points
+    std::sort(constellationData[x].begin(), constellationData[x].end());
+    // take the top 5-10 'strongest'/'robust' points
+    std::vector<std::pair<float, int>>::const_iterator first = constellationData[x].end() - 5;
+    std::vector<std::pair<float, int>>::const_iterator last = constellationData[x].end();
+    peakPoints.assign(first, last);
+}// end generatePeakPoints(
+
+void MainComponent::generateFingerprint() {
+    for (int x = 0; x < (int)hashingData.size(); x++) {
+        // sort to get the most prominent points (peak frequency points)
+        std::sort(hashingData[x].begin(), hashingData[x].end());
+
+        // take the top 5-10 'strongest'/'robust' points
+        std::vector<std::pair<int, int>>::const_iterator first = hashingData[x].end() - 5;
+        std::vector<std::pair<int, int>>::const_iterator last = hashingData[x].end();
+        std::vector<std::pair<int, int>> peakPoints(first, last);
+
+        // sort to get in order of increasing y value ... 0->1->2->3 which is from .second() of the pair
+        std::sort(peakPoints.begin(), peakPoints.end(),
+        [](const std::pair<int, int>& x, const std::pair<int, int>& y)
+        {
+            return x.second < y.second;
+        });
+
+        // hash these peak frequency values in their correctn increasing order
+        // "hash a bin"
+        std::hash<int> hasher;
+        long fingerprint;
+        for (int y = 0; y < (int)peakPoints.size(); y++) {
+            DBG(y << " PixelX: " << x << " PixelY: " << peakPoints[y].second << " Frequency: " << peakPoints[y].first);
+            fingerprint += hasher(peakPoints[y].second);
+        }
+        //DBG("fingerprint for pixelX = " << x << " is " << fingerprint);
+        fingerprint = 0;
+    }
+}// end generateFingerprint()
 
 void MainComponent::openButtonClicked() {
     //Create the FileChooser object with a short message and allow the user to select only .wav files
@@ -174,5 +218,6 @@ void MainComponent::drawSpectrogram() {
         position++;
     }
     drawConstellationImage();
+    generateFingerprint();
     repaint();
 }// drawSpectrogram()
