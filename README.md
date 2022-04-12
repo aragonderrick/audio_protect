@@ -11,4 +11,4 @@ This graph is called a spectrogram (https://en.wikipedia.org/wiki/Spectrogram). 
 
 The main chunk of the algorithm lies within the hashing of these points. The key is to increase the lookup time while decreasing the storage space required as well as reduce potential clashes in the hash-table.
 
-The inspiration for my implimentation of this fingerprinting algorihm came from Shazam. Please feel free to review my source code, as I feel having open-source code leads to the highest level of transparency as well as contantly looking to improve the application.
+The inspiration for my implimentation of this fingerprinting algorithm came from Shazam. Please feel free to review my source code, as I feel having open-source code leads to the highest level of transparency as well as contantly looking to improve the application.
