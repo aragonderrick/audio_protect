@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 #include "Range.h"
+#include "hashTable.h"
 
 using Range = juce::NormalisableRange<float>;
 
@@ -30,6 +31,8 @@ public:
     void readInFileFFT(const juce::File& file);
     void drawSpectrogram();
     void drawConstellationImage();
+    void generateFingerprint();
+    void generatePeakPoints(int x); // takes in pixelX
 
 private:
     // Buttons
@@ -52,6 +55,8 @@ private:
     std::array<float, fftSize> fifo;
     std::array<float, fftSize*2> fftData;
     std::vector<std::vector<std::pair<float, int>>> constellationData; // vector of pairs where <fftData, y-axis pixel>
+    std::vector<std::vector<std::pair<int, int>>> hashingData; // vector of pairs where <fftData (floor), y-axis pixel>
+    std::vector<std::pair<float, int>> peakPoints;
     int fifoIndex = 0;
     bool nextFFTBlockReady = false;
     float maxValue;
