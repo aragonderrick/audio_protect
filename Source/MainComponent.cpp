@@ -117,7 +117,12 @@ void MainComponent::drawNextLineOfSpectrogram() {
 
 void MainComponent::drawConstellationImage() {
     for (int x = 0; x < (int)constellationData.size(); x++) {
-        generatePeakPoints(x);
+        // sort to get the most prominent points
+        std::sort(constellationData[x].begin(), constellationData[x].end());
+        // take the top 5-10 'strongest'/'robust' points
+        std::vector<std::pair<float, int>>::const_iterator first = constellationData[x].end() - 5;
+        std::vector<std::pair<float, int>>::const_iterator last = constellationData[x].end();
+        std::vector<std::pair<float, int>> peakPoints(first, last);
         // draw these points on the image
         for (int y = 0; y < (int)peakPoints.size(); y++) {
             //DBG(y << " PixelX: " << x << " PixelY: " << peakPoints[y].second << " FrequencyLevel: " << peakPoints[y].first);
@@ -127,14 +132,6 @@ void MainComponent::drawConstellationImage() {
     }
 }// end constellationImage()
 
-void MainComponent::generatePeakPoints(int x) {
-    // sort to get the most prominent points
-    std::sort(constellationData[x].begin(), constellationData[x].end());
-    // take the top 5-10 'strongest'/'robust' points
-    std::vector<std::pair<float, int>>::const_iterator first = constellationData[x].end() - 5;
-    std::vector<std::pair<float, int>>::const_iterator last = constellationData[x].end();
-    peakPoints.assign(first, last);
-}// end generatePeakPoints(
 
 void MainComponent::generateFingerprint() {
     for (int x = 0; x < (int)hashingData.size(); x++) {
@@ -142,9 +139,20 @@ void MainComponent::generateFingerprint() {
         std::sort(hashingData[x].begin(), hashingData[x].end());
 
         // take the top 5-10 'strongest'/'robust' points
-        std::vector<std::pair<int, int>>::const_iterator first = hashingData[x].end() - 5;
-        std::vector<std::pair<int, int>>::const_iterator last = hashingData[x].end();
-        std::vector<std::pair<int, int>> peakPoints(first, last);
+        std::vector<std::pair<int, int>>::iterator last = (hashingData[x].end() - 1);
+        std::vector<std::pair<int, int>> peakPoints;
+        
+        // GRAB UNIQUE VALUES from sorted hashingdata[]
+        while (peakPoints.size() < 5) {
+            int searchVal = last._Unwrapped()->first;
+            //DBG("Is " << searchVal << " in the vector?");
+            if (std::find_if(peakPoints.begin(), peakPoints.end(), [searchVal](const auto& pair) { return pair.first == searchVal; }) == peakPoints.end()) {
+                // insert if it isnt already a peak point
+                //DBG("Adding " << last._Unwrapped()->first << " and " << last._Unwrapped()->second << " to the vector?");
+                peakPoints.push_back(std::make_pair(last._Unwrapped()->first, last._Unwrapped()->second));
+            }
+            last--;
+        }
 
         // sort to get in order of increasing y value ... 0->1->2->3 which is from .second() of the pair
         std::sort(peakPoints.begin(), peakPoints.end(),
@@ -153,15 +161,14 @@ void MainComponent::generateFingerprint() {
             return x.second < y.second;
         });
 
-        // hash these peak frequency values in their correctn increasing order
-        // "hash a bin"
+        // hash these peak frequency values in their correctn increasing order "hash a bin"
         std::hash<int> hasher;
-        long fingerprint;
+        long fingerprint = 0;
         for (int y = 0; y < (int)peakPoints.size(); y++) {
             DBG(y << " PixelX: " << x << " PixelY: " << peakPoints[y].second << " Frequency: " << peakPoints[y].first);
             fingerprint += hasher(peakPoints[y].second);
         }
-        //DBG("fingerprint for pixelX = " << x << " is " << fingerprint);
+        DBG("fingerprint for pixelX = " << x << " is " << fingerprint);
         fingerprint = 0;
     }
 }// end generateFingerprint()
