@@ -65,6 +65,7 @@ private:
     int position; //position in the array of sample data
     int pixelX;
     int fftIndex;
+    double duration;
     Range normalRange;
     juce::String currentSizeAsString;
     juce::String currentStatus;
