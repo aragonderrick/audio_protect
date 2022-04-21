@@ -134,24 +134,24 @@ void MainComponent::drawConstellationImage() {
 
 
 void MainComponent::generateFingerprint() {
-    for (int x = 0; x < (int)hashingData.size(); x++) {
+    int frames_per_second = std::floor(hashingData.size() / duration);
+    int seconds_passed = 0;
+    for (int x = 0; x < (int)hashingData.size(); x+= frames_per_second) {
+        // Every 1 second in the data, I will only fingerprint these points
         // sort to get the most prominent points (peak frequency points)
         std::sort(hashingData[x].begin(), hashingData[x].end());
 
-        // take the top 5-10 'strongest'/'robust' points
-        std::vector<std::pair<int, int>>::iterator last = (hashingData[x].end() - 1);
         std::vector<std::pair<int, int>> peakPoints;
-        
-        // GRAB UNIQUE VALUES from sorted hashingdata[]
-        while (peakPoints.size() < 5) {
-            int searchVal = last._Unwrapped()->first;
+        int i = 1;
+        // GRAB UNIQUE VALUES from sorted hashingdata[], take the top 5 'strongest'/'robust' points
+        while (peakPoints.size() < 5 && (hashingData[x].end() - i) != hashingData[x].begin()) {
+            int searchVal = (hashingData[x].end()- i)->first;
             //DBG("Is " << searchVal << " in the vector?");
             if (std::find_if(peakPoints.begin(), peakPoints.end(), [searchVal](const auto& pair) { return pair.first == searchVal; }) == peakPoints.end()) {
                 // insert if it isnt already a peak point
-                //DBG("Adding " << last._Unwrapped()->first << " and " << last._Unwrapped()->second << " to the vector?");
-                peakPoints.push_back(std::make_pair(last._Unwrapped()->first, last._Unwrapped()->second));
+                peakPoints.push_back(std::make_pair((hashingData[x].end() - i)->first, (hashingData[x].end() - i)->second));
             }
-            last--;
+            i++;
         }
 
         // sort to get in order of increasing y value ... 0->1->2->3 which is from .second() of the pair
@@ -165,11 +165,12 @@ void MainComponent::generateFingerprint() {
         std::hash<int> hasher;
         long fingerprint = 0;
         for (int y = 0; y < (int)peakPoints.size(); y++) {
-            DBG(y << " PixelX: " << x << " PixelY: " << peakPoints[y].second << " Frequency: " << peakPoints[y].first);
+            DBG("Seconds Passed: " << seconds_passed << " => " << y << " PixelX: " << x << " PixelY: " << peakPoints[y].second << " Frequency: " << peakPoints[y].first);
             fingerprint += hasher(peakPoints[y].second);
         }
         DBG("fingerprint for pixelX = " << x << " is " << fingerprint);
         fingerprint = 0;
+        seconds_passed++;
     }
 }// end generateFingerprint()
 
@@ -189,7 +190,7 @@ void MainComponent::readInFileFFT(const juce::File& file) {
         auto* reader = formatManager.createReaderFor(file); //reads in from the chosen file
         if (reader != nullptr) {
             auto newSource = std::make_unique<juce::AudioFormatReaderSource>(reader, true);
-            const double duration = reader->lengthInSamples / reader->sampleRate;
+            duration = reader->lengthInSamples / reader->sampleRate;
             if (duration < 600) {
                 // limits input file to 600 seconds -> 10 mins
                 fileBuffer.setSize(reader->numChannels, reader->lengthInSamples);
