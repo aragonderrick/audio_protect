@@ -5,11 +5,11 @@
 #include "hashTable.h"
 #include <algorithm>
 #include <vector>
+#include <string>
 
 using Range = juce::NormalisableRange<float>;
 
-class MainComponent  : public juce::AudioAppComponent
-{
+class MainComponent  : public juce::AudioAppComponent {
 public:
     enum
     {
@@ -34,6 +34,7 @@ public:
     void drawSpectrogram();
     void drawConstellationImage();
     void generateFingerprint();
+    void populateFingerprints();
 
 private:
     // Buttons
@@ -52,23 +53,28 @@ private:
     juce::Image constellationImage;
     juce::Image combinedImage;
 
+    // Objects and variables for hashtable
+    HashTable hashtable;
+
     // variables needed for FFT
     std::array<float, fftSize> fifo;
     std::array<float, fftSize*2> fftData;
     std::vector<std::vector<std::pair<float, int>>> constellationData; // vector of pairs where <fftData, y-axis pixel>
     std::vector<std::vector<std::pair<int, int>>> hashingData; // vector of pairs where <fftData (floor), y-axis pixel>
-    //std::vector<std::pair<float, int>> peakPoints;
     int fifoIndex = 0;
     bool nextFFTBlockReady = false;
     float maxValue;
-    float** channels;
     int position; //position in the array of sample data
     int pixelX;
     int fftIndex;
+
+    // Other variables required (non-specific to a certain portion of the algorithm)
     double duration;
+    bool draw;
     Range normalRange;
     juce::String currentSizeAsString;
-    juce::String currentStatus;
+    std::string currentStatus;
+    std::string song_name;
     juce::Image logo = juce::ImageFileFormat::loadFrom(juce::File("C:/Users/arago/OneDrive/Desktop/Spring2022/CSCI490/images/logo2.png"));
    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
