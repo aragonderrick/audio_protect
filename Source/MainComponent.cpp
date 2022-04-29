@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include <sstream>
 
 //==============================================================================
 MainComponent::MainComponent()
@@ -8,8 +9,8 @@ MainComponent::MainComponent()
     spectrogramImage(juce::Image::RGB, 660, 330, true), 
     constellationImage(juce::Image::RGB, 660, 330, true), 
     combinedImage(juce::Image::RGB, 1360, 330, true),
-    currentStatus("Please Select a Video for Processing"),
-    maxValue(1)
+    maxValue(1),
+    hashtable(3)
 {
     // Buttons
     addAndMakeVisible(&openButton);
@@ -22,6 +23,8 @@ MainComponent::MainComponent()
     setSize (1400, 900);
 
     formatManager.registerBasicFormats(); // allows for .wav and .aaif files
+
+    populateFingerprints();
 }
 
 MainComponent::~MainComponent() {
@@ -73,8 +76,58 @@ void MainComponent::paint (juce::Graphics& g) {
 void MainComponent::resized() {
     openButton.setBounds(100, 780, ((getWidth() - 20)/2)-320, 30);
     currentSizeAsString = juce::String(getWidth()) + " x " + juce::String(getHeight());
-}
+}// end resize()
 
+void MainComponent::populateFingerprints() {
+    //draw = false;
+    //juce::File audioFiles("C:/Users/arago/OneDrive/Desktop/Spring2022/CSCI490/TestFilesWav");
+    //juce::Array<juce::File> wavFiles;
+    //wavFiles = audioFiles.findChildFiles(2, false, "*.wav");
+    //for (int i = 0; i < (int)wavFiles.size(); i++) {
+    //   readInFileFFT(wavFiles[i]);
+    //}
+    draw = true;
+    const juce::File fingerprintData("C:/Users/arago/OneDrive/Desktop/Spring2022/CSCI490/formated_database_small.txt");
+    if (!fingerprintData.existsAsFile()) {
+        DBG(fingerprintData.getFileName() << " doesnt not exist");
+        return;  // file doesn't exist
+    }
+    juce::FileInputStream inputStream(fingerprintData);
+    if (!inputStream.openedOk()) {
+        DBG("failed to open " << inputStream.getFile().getFileName());
+        return;  // failed to open
+    }
+    bool hasFingerprint = false;
+    while (!inputStream.isExhausted()){
+        std::istringstream ss(inputStream.readNextLine().toStdString());
+        std::string word;
+        long fp;
+        ss >> word;
+        if (word == "*") {
+            hasFingerprint = true;
+        }
+        else if(hasFingerprint){
+            fp = std::stol(word);
+            ss = (std::istringstream)inputStream.readNextLine().toStdString();
+            ss >> word;
+            int num_prints = std::stoi(word);
+            //DBG(word);
+            for (int i = 0; i < num_prints; i++) {
+                ss = (std::istringstream)inputStream.readNextLine().toStdString();
+                ss >> word;
+                //DBG(word);
+                std::string name = word;
+                ss >> word;
+                int seconds = std::stoi(word);
+                hashtable.insertElement(fp, seconds, name);
+            }
+            hasFingerprint = false;
+        }
+    }
+    hashtable.printAll();
+    currentStatus = "Populated the Database with 25 Songs.";
+    //DBG(wavFiles.size());
+}// end populateFingerprints()
 
 //gives the current FFT block the next sample data
 void MainComponent::pushNextSampleIntoFifo(float sample) noexcept {
@@ -109,9 +162,11 @@ void MainComponent::drawNextLineOfSpectrogram() {
         // store key points
         hashingData[pixelX].push_back(std::make_pair(fftData[fftDataIndex], y)); // implicit caste to int for fftData[fftDataIndex]
         constellationData[pixelX].push_back(std::make_pair(level,y));
-        // draw the image
-        spectrogramImage.setPixelAt(pixelX, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
-        combinedImage.setPixelAt(pixelX, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
+        if (draw) {
+            // draw the image
+            spectrogramImage.setPixelAt(pixelX, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
+            combinedImage.setPixelAt(pixelX, y, juce::Colour::fromHSV(level, 1.0f, level, 1.0f));
+        }
     }
 }// drawNextLineOfSpectrogram()
 
@@ -124,10 +179,12 @@ void MainComponent::drawConstellationImage() {
         std::vector<std::pair<float, int>>::const_iterator last = constellationData[x].end();
         std::vector<std::pair<float, int>> peakPoints(first, last);
         // draw these points on the image
-        for (int y = 0; y < (int)peakPoints.size(); y++) {
-            //DBG(y << " PixelX: " << x << " PixelY: " << peakPoints[y].second << " FrequencyLevel: " << peakPoints[y].first);
-            constellationImage.setPixelAt(x, peakPoints[y].second, juce::Colours::white);
-            combinedImage.setPixelAt(x, peakPoints[y].second, juce::Colours::white);
+        if (draw) {
+            for (int y = 0; y < (int)peakPoints.size(); y++) {
+                //DBG(y << " PixelX: " << x << " PixelY: " << peakPoints[y].second << " FrequencyLevel: " << peakPoints[y].first);
+                constellationImage.setPixelAt(x, peakPoints[y].second, juce::Colours::white);
+                combinedImage.setPixelAt(x, peakPoints[y].second, juce::Colours::white);
+            }
         }
     }
 }// end constellationImage()
@@ -165,13 +222,15 @@ void MainComponent::generateFingerprint() {
         std::hash<int> hasher;
         long fingerprint = 0;
         for (int y = 0; y < (int)peakPoints.size(); y++) {
-            DBG("Seconds Passed: " << seconds_passed << " => " << y << " PixelX: " << x << " PixelY: " << peakPoints[y].second << " Frequency: " << peakPoints[y].first);
+            //DBG("Seconds Passed: " << seconds_passed << " => " << y << " PixelX: " << x << " PixelY: " << peakPoints[y].second << " Frequency: " << peakPoints[y].first);
             fingerprint += hasher(peakPoints[y].second);
         }
-        DBG("fingerprint for pixelX = " << x << " is " << fingerprint);
+        //DBG("fingerprint for pixelX = " << x << " is " << fingerprint);
+        hashtable.insertElement(fingerprint, seconds_passed, song_name);
         fingerprint = 0;
         seconds_passed++;
     }
+    //hashtable.printAll();
 }// end generateFingerprint()
 
 void MainComponent::openButtonClicked() {
@@ -182,15 +241,17 @@ void MainComponent::openButtonClicked() {
     chooser->launchAsync(chooserFlags, [this](const juce::FileChooser& fc) {
         readInFileFFT(fc.getResult());
     });
-    currentStatus = "Processing The Selected File...";
 }// openButtonClicked()
 
 void MainComponent::readInFileFFT(const juce::File& file) {
+    currentStatus = "Processing " + file.getFileName().toStdString();
+    song_name = file.getFileName().toStdString();
     if (file != juce::File{}) {
         auto* reader = formatManager.createReaderFor(file); //reads in from the chosen file
         if (reader != nullptr) {
             auto newSource = std::make_unique<juce::AudioFormatReaderSource>(reader, true);
             duration = reader->lengthInSamples / reader->sampleRate;
+            fileBuffer.clear();
             if (duration < 600) {
                 // limits input file to 600 seconds -> 10 mins
                 fileBuffer.setSize(reader->numChannels, reader->lengthInSamples);
@@ -198,22 +259,24 @@ void MainComponent::readInFileFFT(const juce::File& file) {
                 position = 0;
                 drawSpectrogram();
             }
-            readerSource.reset(newSource.release());
         }
     }
 }// readInFileFFT()
 
 //draws the spectrogram using the data from the fileBuffer, which contains sample data from the read in file
 void MainComponent::drawSpectrogram() {
-    //clear the spectrogram
+    // reset fft variables
     position = 0;
     pixelX = 0;
-    spectrogramImage.clear(spectrogramImage.getBounds(), juce::Colours::black);
-    constellationImage.clear(constellationImage.getBounds(), juce::Colours::black);
-    combinedImage.clear(combinedImage.getBounds(), juce::Colours::black);
     nextFFTBlockReady = false;
     std::fill(fftData.begin(), fftData.end(), 0.0f);
     std::fill(fifo.begin(), fifo.end(), 0.0f);
+    fifoIndex = 0;
+
+    //clear the images
+    spectrogramImage.clear(spectrogramImage.getBounds(), juce::Colours::black);
+    constellationImage.clear(constellationImage.getBounds(), juce::Colours::black);
+    combinedImage.clear(combinedImage.getBounds(), juce::Colours::black);
 
     //for each sample in the file buffer
     while (position < fileBuffer.getNumSamples()) {
