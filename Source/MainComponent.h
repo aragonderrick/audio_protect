@@ -28,6 +28,7 @@ public:
     void resized() override;
     //==============================================================================
     void openButtonClicked();
+    void checkButtonClicked();
     void pushNextSampleIntoFifo(float sample) noexcept;
     void drawNextLineOfSpectrogram();
     void readInFileFFT(const juce::File& file);
@@ -35,10 +36,12 @@ public:
     void drawConstellationImage();
     void generateFingerprint();
     void populateFingerprints();
+    void makePrediction();
 
 private:
     // Buttons
     juce::TextButton openButton;
+    juce::TextButton checkButton;
 
     // Format and Audio Variables
     juce::AudioFormatManager formatManager; // takes care of audio formatting
@@ -55,6 +58,7 @@ private:
 
     // Objects and variables for hashtable
     HashTable hashtable;
+    std::vector<std::vector<std::pair<std::string, int>>> potential_matches;
 
     // variables needed for FFT
     std::array<float, fftSize> fifo;
