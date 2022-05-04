@@ -9,15 +9,9 @@
 */
 
 #include "hashTable.h"
-// Constructor to create a hash table with 'n' indices:
-HashTable::HashTable(int n) {
 
-    // Do nothing for now
-
-}// end HashTable()
-
-// Insert data in the hash table:
 void HashTable::insertElement(long fp, int time, std::string name) {
+    // Insert data in the hash table:
     table[fp].push_back(DataPoint(name, time));
 
 }// end insertElement()
@@ -26,12 +20,13 @@ bool HashTable::check(long fingerprint, int time, std::vector<std::pair<std::str
     if (table[fingerprint].size()) {
         // fingerprint exists
         for (auto it = table[fingerprint].begin(); it != table[fingerprint].end(); it++) {
+            // add all ofsets and song names too the potenital matches
             matches.push_back(std::make_pair(it->getSongId(), (it->getTime() - time)));
         }
         return true;
     }
     return false;
-}
+}// end check()
 
 void HashTable::printAll() {
     DBG("NUMBER OF FINGER PRINTS: " << table.size());
