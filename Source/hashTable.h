@@ -25,17 +25,16 @@ using namespace std;
 class HashTable {
 public:
     // Constructor to create a hash table with 'n' indices:
-    HashTable(int n);
 
     // Insert data in the hash table:
     void insertElement(long fp, int time, std::string name);
 
+    // check for potential matches
     bool check(long fingerprint, int time, std::vector<std::pair<std::string, int>> &matches);
 
+    // print all values in map
     void printAll();
 
 private:
-    //list<long>* table;
     std::map<long, std::vector<DataPoint>> table;
-
 };
