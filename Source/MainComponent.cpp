@@ -11,16 +11,13 @@ MainComponent::MainComponent()
     spectrogramImage(juce::Image::RGB, 660, 330, true),
     constellationImage(juce::Image::RGB, 660, 330, true),
     combinedImage(juce::Image::RGB, 1360, 330, true),
-    maxValue(1),
-    hashtable(3)
+    maxValue(1)
 {
     // Buttons
     addAndMakeVisible(&openButton);
     openButton.onClick = [this] { openButtonClicked(); };
     addAndMakeVisible(&checkButton);
     checkButton.onClick = [this] { checkButtonClicked(); };
-    //addAndMakeVisible(&checkButton);
-    //openButton.onClick = [this] { checkButtonClicked(); };
 
     setOpaque(true);
 
@@ -73,7 +70,7 @@ void MainComponent::paint(juce::Graphics& g) {
     g.setFont(20.0f);
     g.setColour(juce::Colours::white);
     g.drawMultiLineText(currentStatus, (getWidth() - 440), 800, 400);
-    g.drawText(currentSizeAsString, getLocalBounds(), juce::Justification::bottomRight, true);
+    //g.drawText(currentSizeAsString, getLocalBounds(), juce::Justification::bottomRight, true);
     g.drawMultiLineText("Spectrogram No Peaks", 270, 40, 400);
     g.drawMultiLineText("Peaks No Spectrogram", (getWidth() / 2) + 270, 40, 400);
     g.drawMultiLineText("Spectrogram With Peaks", 580, 400, 400);
@@ -82,10 +79,13 @@ void MainComponent::paint(juce::Graphics& g) {
 void MainComponent::resized() {
     openButton.setBounds(100, 760, ((getWidth() - 20) / 2) - 320, 30);
     checkButton.setBounds(100, 800, ((getWidth() - 20) / 2) - 320, 30);
-    currentSizeAsString = juce::String(getWidth()) + " x " + juce::String(getHeight());
+    //currentSizeAsString = juce::String(getWidth()) + " x " + juce::String(getHeight());
 }// end resize()
 
 void MainComponent::populateFingerprints() {
+    // UNCOMMENT THIS PORTION OF THE CODE TO POPULATE A TEXT FILE WITH FFT DATA (THE DATABASE)
+    //*******************************************************************************
+    // 
     //draw = false;
     //juce::File audioFiles("C:/Users/arago/OneDrive/Desktop/Spring2022/CSCI490/TestFilesWav");
     //juce::Array<juce::File> wavFiles;
@@ -94,6 +94,9 @@ void MainComponent::populateFingerprints() {
     //    readInFileFFT(wavFiles[i]);
     //}
     //draw = true;
+    //hashtable.printAll();
+    // 
+    //*******************************************************************************
     const juce::File fingerprintData("C:/Users/arago/OneDrive/Desktop/Spring2022/CSCI490/formated_database.txt");
     if (!fingerprintData.existsAsFile()) {
         DBG(fingerprintData.getFileName() << " doesnt not exist");
@@ -131,9 +134,7 @@ void MainComponent::populateFingerprints() {
             hasFingerprint = false;
         }
     }
-    //hashtable.printAll();
     currentStatus = "Populated the Database with 25 Songs.";
-    //DBG(wavFiles.size());
 }// end populateFingerprints()
 
 //gives the current FFT block the next sample data
@@ -203,7 +204,6 @@ void MainComponent::generateFingerprint() {
         // Every 1 second in the data, I will only fingerprint these points
         // sort to get the most prominent points (peak frequency points)
         std::sort(hashingData[x].begin(), hashingData[x].end());
-
         std::vector<std::pair<int, int>> peakPoints;
         int i = 1;
         // GRAB UNIQUE VALUES from sorted hashingdata[], take the top 5 'strongest'/'robust' points
@@ -250,8 +250,9 @@ void MainComponent::generateFingerprint() {
 }// end generateFingerprint()
 
 void MainComponent::makePrediction() {
+    // prepare map for sorting and indexing predictions
     std::map<int, std::vector<std::string>> matches;
-
+    //sort through potential matches and bin them by their offset value
     for (int i = 0; i < potential_matches.size(); i++) {
         for (int j = 0; j < potential_matches[i].size(); j++) {
             matches[potential_matches[i][j].second].push_back(potential_matches[i][j].first);
@@ -260,29 +261,21 @@ void MainComponent::makePrediction() {
 
     std::string guestimate = "";
     int guestimate_occurance = 1;
-
+    // loop through all of the offsets
     for (auto it = matches.begin(); it != matches.end(); it++) {
+        // if a bin contains enough songs to potentially changhe our guess, look at songs in the bin
         if (it->second.size() >= guestimate_occurance) {
+            // will strack accurance of song and its name with map
             std::map<string, int> occurence;
             auto it2 = it;
+            // for this offset AND the next 3 offsets (due to JUCE bad timing functions)
             for (int i = 0; i < 4 && it2 != matches.end(); it2++, i++) {
+                // track how aften a song occures for that given offset
                 for (auto dp : it2->second) {
                     occurence[dp]++;
                 }
             }
-            
-            //it2 = it;
-            //if (it2 == matches.begin()) {
-            //    it2++;
-            //    it2++;
-            //    it2++;
-            //}
-            //for (int i = 0; i < 3; it2--, i++) {
-            //    for (auto dp : it2->second) {
-            //        occurence[dp]++;
-            //    }
-            //}
-
+            // look for the most common occurance and this will be our current best guess
             for (auto it3 : occurence) {
                 if (it3.second >= guestimate_occurance) {
                     guestimate_occurance = it3.second;
@@ -291,23 +284,7 @@ void MainComponent::makePrediction() {
             }
         }
     }
-
-    //for (auto const& [key, val] : matches) {
-    //    if (val.size() >= guestimate_occurance) {
-    //        std::map<string, int> occurence;
-    //        for (auto dp : val) {
-    //            occurence[dp]++;
-    //        }
-    //        for (auto it : occurence) {
-    //            if (it.second >= guestimate_occurance) {
-    //                guestimate_occurance = it.second;
-    //                guestimate = it.first;
-    //            }
-    //        }
-    //    }
-    //}
     currentStatus = "Detected " + guestimate;
-
     //DBG(guestimate);
 }// end makePrediction()
 
@@ -380,8 +357,10 @@ void MainComponent::drawSpectrogram() {
         }
         position++;
     }
+    // draw the images 
     drawConstellationImage();
     generateFingerprint();
+    // make predictions
     if (potential_matches.size() && !draw) {
         makePrediction();
     }
